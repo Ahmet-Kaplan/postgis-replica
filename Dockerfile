@@ -16,18 +16,22 @@ RUN set -e \
 	groupadd -r postgres --gid=1000 && \
 	useradd -r -g postgres --uid=1000 --home-dir=/var/lib/postgresql --shell=/bin/bash postgres && \
 	mkdir -p /var/lib/postgresql /var/run/postgresql /var/lib/postgresql/initdb.d && chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql && \
-  apt-get install -y curl nano pspg procps gosu dnsutils gnupg git && \
+  apt-get install -y curl nano pspg procps gosu dnsutils gnupg git libcurl4-openssl-dev libssl-dev libz-dev lsb-release wget libc6 && \
   # Alias gosu as the scripts are still used for alpine linux
   ln -s /usr/sbin/gosu /usr/sbin/su-exec && \
   >&2 echo "Install Postgres" && \
   sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt bullseye-pgdg main 15" > /etc/apt/sources.list.d/pgdg.list' && \
   sh -c 'curl -s https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -' && \
   apt-get update && \
-  apt-get install -y --no-install-recommends postgresql-common && \
+  apt-get install -y --no-install-recommends postgresql-common postgresql-contrib && \
 	sed -ri 's/#(create_main_cluster) .*$/\1 = false/' /etc/postgresql-common/createcluster.conf && \
 	apt-get install -y --no-install-recommends "postgresql-15=15.0-1.pgdg110+1" && \
   >&2 echo 'Install pg_auto_failover' && \
   apt-get install -y pg-auto-failover-cli postgresql-15-auto-failover && \
+  >&2 echo 'Install plptyhon3' && \
+  apt-get install -y python3 postgresql-plpython3-15 python3-psutil && \
+  >&2 echo 'Install postgis' && \
+  apt-get install -y postgis postgresql-15-postgis-3 postgresql-15-postgis-3-scripts && \
   >&2 echo 'Install wal-g' && \
   curl -s -L https://github.com/wal-g/wal-g/releases/download/v2.0.1/wal-g-pg-ubuntu-18.04-amd64 > /usr/local/bin/wal-g && \
   chmod +x /usr/local/bin/wal-g && \

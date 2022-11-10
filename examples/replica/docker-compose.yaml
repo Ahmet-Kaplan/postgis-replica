@@ -1,19 +1,59 @@
 version: '3'
 
+networks:
+  dbnetwork:
+
+x-env-shared: &env-shared
+  networks:
+    - dbnetwork
+  # After 10 restarts don't try it again, otherwise it could affect other services on the host machine by restarting infinitely
+  restart:
+      on-failure:10
+  # Limit the logging files to 10 with 100mb each, otherwise there is no limit until the disk is full
+  logging:
+      driver: "json-file"
+      options:
+        max-size: "100mb"
+        max-file: "10"
+
 services:
   primary:
-    image: livingdocs/postgres:15.0
-    ports: [5432:5432]
+    image: kaplan38/postgis:15.0
+    hostname: primary
+    ports: [5431:5432]
     restart: on-failure
     volumes:
       - ./primary-postgresql:/var/lib/postgresql
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    <<: *env-shared
 
-  replica:
-    image: livingdocs/postgres:15.0
+  replica1:
+    image: kaplan38/postgis:15.0
+    hostname: replica1
     ports: [5433:5432]
     restart: on-failure
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - ./replica-postgresql:/var/lib/postgresql
-    command: standby -d "host=primary port=5432 user=postgres password=${POSTGRES_PASSWORD} target_session_attrs=read-write"
+    command: standby -d "host=primary port=5431 user=postgres password=${POSTGRES_PASSWORD} target_session_attrs=read-write"
+    depends_on:
+      - primary
+    <<: *env-shared
+  pgpool:
+    image: docker.io/bitnami/pgpool:4
+    hostname: pgpool
+    ports:
+      - 5432:5432
+    depends_on:
+      - primary
+      - replica1
+    env_file:
+      - ./pg_pool.env
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/scripts/pgpool/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    <<: *env-shared
