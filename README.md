@@ -1,5 +1,5 @@
 # [PostGIS + Replica + PL/Python extensions added into Postgres 15.0](https://github.com/Ahmet-Kaplan/postgis-replica) 
-inspired from [livingdocsIO/dockerfile-postgres] (https://github.com/livingdocsIO/dockerfile-postgres) 
+inspired from [livingdocsIO/dockerfile-postgres](https://github.com/livingdocsIO/dockerfile-postgres) 
 
 - Based on Debian
 - Includes `postgres-contrib`, enables the extensions `pg_stat_statements` by default
