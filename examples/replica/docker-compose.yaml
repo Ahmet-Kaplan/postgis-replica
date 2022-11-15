@@ -1,4 +1,4 @@
-version: '3'
+version: '3.9'
 
 networks:
   dbnetwork:
@@ -16,44 +16,104 @@ x-env-shared: &env-shared
         max-size: "100mb"
         max-file: "10"
 
+x-pgcluster: &pgcluster
+  image: kaplan38/postgis:15
+  environment:
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  <<: *env-shared
+
 services:
   primary:
-    image: kaplan38/postgis:15.0
     hostname: primary
     ports: [5431:5432]
-    restart: on-failure
     volumes:
       - ./primary-postgresql:/var/lib/postgresql
-    environment:
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    <<: *env-shared
+    <<: *pgcluster
 
   replica1:
-    image: kaplan38/postgis:15.0
     hostname: replica1
     ports: [5433:5432]
-    restart: on-failure
-    environment:
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - ./replica-postgresql:/var/lib/postgresql
-    command: standby -d "host=primary port=5431 user=postgres password=${POSTGRES_PASSWORD} target_session_attrs=read-write"
+    command: standby -d "host=primary port=5432 user=postgres password=${POSTGRES_PASSWORD} target_session_attrs=read-write"
     depends_on:
       - primary
-    <<: *env-shared
+    <<: *pgcluster
   pgpool:
     image: docker.io/bitnami/pgpool:4
     hostname: pgpool
     ports:
       - 5432:5432
+    labels:
+      - "traefik.enable: true"
+      # routers
+      - "traefik.tcp.routers.postgres.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.postgres.entryPoints=postgres"
+      - "traefik.tcp.routers.postgres.service=postgres"
+      # services (needed for TCP)
+      - "traefik.tcp.services.postgres.loadbalancer.server.port=5432" 
     depends_on:
       - primary
       - replica1
-    env_file:
-      - ./pg_pool.env
+    environment:
+      - PGPOOL_BACKEND_NODES=0:primary,1:replica1
+      - PGPOOL_SR_CHECK_USER=postgres
+      - PGPOOL_SR_CHECK_PASSWORD=${POSTGRES_PASSWORD}
+      - PGPOOL_ENABLE_LDAP=no
+      - PGPOOL_POSTGRES_USERNAME=postgres
+      - PGPOOL_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - PGPOOL_ADMIN_USERNAME=admin
+      - PGPOOL_ADMIN_PASSWORD=adminpassword
+      - PGPOOL_ENABLE_LOAD_BALANCING=yes
     healthcheck:
       test: ["CMD", "/opt/bitnami/scripts/pgpool/healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 5
     <<: *env-shared
+  pgadmin:
+    image: dpage/pgadmin4
+    hostname: pgadmin
+    ports:
+      - 16543:80
+    labels:
+      - "traefik.enable: true"
+      # routers
+      - "traefik.tcp.routers.postgres.rule=HostSNI(`pgadmin`)"
+      - "traefik.tcp.routers.postgres.entryPoints=http"
+      - "traefik.tcp.routers.postgres.service=postgres"
+      # services (needed for TCP)
+      - "traefik.tcp.services.postgres.loadbalancer.server.port=16543" 
+    environment: 
+        PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+        PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    depends_on: 
+        - primary
+    <<: *env-shared  
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./portainer-data:/data
+    ports:
+      - 9000:9000
+
+  portainer_agent:
+    image:  portainer/agent:latest
+    container_name: portainer_agent
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    ports:
+      - 9001:9001
+

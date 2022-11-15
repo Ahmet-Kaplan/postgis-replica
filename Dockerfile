@@ -25,10 +25,10 @@ RUN set -e \
   apt-get update && \
   apt-get install -y --no-install-recommends postgresql-common postgresql-contrib && \
 	sed -ri 's/#(create_main_cluster) .*$/\1 = false/' /etc/postgresql-common/createcluster.conf && \
-	apt-get install -y --no-install-recommends "postgresql-15=15.0-1.pgdg110+1" && \
+	apt-get install -y --no-install-recommends postgresql-15 && \
   >&2 echo 'Install pg_auto_failover' && \
   apt-get install -y pg-auto-failover-cli postgresql-15-auto-failover && \
-  >&2 echo 'Install plptyhon3' && \
+  >&2 echo 'Install PLPython3' && \
   apt-get install -y python3 postgresql-plpython3-15 python3-psutil && \
   >&2 echo 'Install postgis' && \
   apt-get install -y postgis postgresql-15-postgis-3 postgresql-15-postgis-3-scripts && \
@@ -48,6 +48,8 @@ RUN set -e \
 USER postgres
 ENV PG_MAJOR=15
 ENV PGUSER=postgres
+ENV PGDATABASE=postgres
+ENV PG_AUTOCTL_DEBUG 1
 ENV PGHOST /var/run/postgresql
 ENV PGPORT 5432
 ENV PGDATA /var/lib/postgresql/data

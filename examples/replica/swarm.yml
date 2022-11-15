@@ -1,0 +1,81 @@
+version: '3.9'
+
+networks:
+  dbnetwork:
+
+# Reusable shared config
+x-deploy-shared: &deploy-shared
+  mode: replicated
+  replicas: 1
+  restart_policy:
+    condition: on-failure
+    delay: 5s
+    max_attempts: 5
+    window: 60s
+x-env-shared: &env-shared
+  image: kaplan38/postgis:15
+  environment:
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  networks:
+    - dbnetwork
+  # After 10 restarts don't try it again, otherwise it could affect other services on the host machine by restarting infinitely
+  restart:
+      on-failure:10
+  # Limit the logging files to 10 with 100mb each, otherwise there is no limit until the disk is full
+  logging:
+      driver: "json-file"
+      options:
+        max-size: "100mb"
+        max-file: "10"
+
+services:
+  primary:
+    hostname: primary
+    ports: [5431:5432]
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      <<: *deploy-shared
+    volumes:
+      - ./primary-postgresql:/var/lib/postgresql
+    <<: *env-shared
+
+  replica1:
+    hostname: replica1
+    ports: [5433:5432]
+    deploy:
+      placement:
+        constraints: [node.role == worker]
+      <<: *deploy-shared
+    volumes:
+      - ./replica-postgresql:/var/lib/postgresql
+    command: standby -d "host=primary port=5432 user=postgres password=${POSTGRES_PASSWORD} target_session_attrs=read-write"
+    depends_on:
+      - primary
+    <<: *env-shared
+  pgpool:
+    image: docker.io/bitnami/pgpool:4
+    hostname: pgpool
+    ports:
+      - 5432:5432
+    networks:
+    - dbnetwork
+    depends_on:
+      - primary
+      - replica1
+    environment:
+      - PGPOOL_BACKEND_NODES=0:primary,1:replica1
+      - PGPOOL_SR_CHECK_USER=postgres
+      - PGPOOL_SR_CHECK_PASSWORD=${POSTGRES_PASSWORD}
+      - PGPOOL_ENABLE_LDAP=no
+      - PGPOOL_POSTGRES_USERNAME=postgres
+      - PGPOOL_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - PGPOOL_ADMIN_USERNAME=admin
+      - PGPOOL_ADMIN_PASSWORD=adminpassword
+      - PGPOOL_ENABLE_LOAD_BALANCING=yes
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/scripts/pgpool/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    <<: *env-shared

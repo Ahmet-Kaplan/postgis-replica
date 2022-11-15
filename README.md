@@ -75,7 +75,7 @@ docker exec postgres-1 psql -c "ALTER ROLE postgres ENCRYPTED PASSWORD 'some-pos
 docker exec postgres-1 psql -c "CREATE USER replication REPLICATION LOGIN ENCRYPTED PASSWORD 'some-replication-password';"
 
 # The launch the replicas
-export DB_URL="host=postgres port=5433 user=replication password=some-replication-password target_session_attrs=read-write"
+export DB_URL="host=postgres port=5432 user=replication password=some-replication-password target_session_attrs=read-write"
 docker run -d -p 5434:5432 --name postgres-2 --network=local --network-alias=postgres kaplan38/postgis:15 standby -d $DB_URL
 docker run -d -p 5435:5432 --name postgres-3 --network=local --network-alias=postgres kaplan38/postgis:15 standby -d $DB_URL
 
